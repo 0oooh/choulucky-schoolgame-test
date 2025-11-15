@@ -25,6 +25,13 @@
             <span class="slider"></span>
           </label>
         </div>
+        <div class="mode-toggle" style="margin-left: 20px;">
+          <span>BGM</span>
+          <label class="switch">
+            <input type="checkbox" id="bgmToggle" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
       </header>
       <main class="play-field">
         <canvas id="gameCanvas" width="1280" height="720"></canvas>
@@ -34,6 +41,14 @@
           <div id="batteryHud"></div>
           <div id="investigatingAlert" class="hidden">순찰중!</div>
         </div>
+        <div id="cutsceneContainer" class="hidden">
+          <video id="cutsceneVideo" preload="auto">
+            <source src="./assets/videos/download.MP4" type="video/mp4" />
+          </video>
+        </div>
+        <audio id="chaseBgm" loop preload="auto">
+          <source src="./assets/bgm/아오오니 브금.mp3" type="audio/mpeg" />
+        </audio>
       </main>
       <footer>
         <form id="dialogueForm" class="dialogue-form">

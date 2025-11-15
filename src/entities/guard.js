@@ -18,6 +18,7 @@ export class Guard extends Entity {
     this.blockedCount = 0; // 연속으로 막힌 횟수
     this.stuckTimer = 0;   // 같은 위치에 머문 시간
     this.lastPosition = { x, y };
+    this.baseSpeed = GUARD_SPEED; // 기본 속도 저장
   }
 
   setPatrolPath(nodes) {
@@ -27,12 +28,14 @@ export class Guard extends Entity {
       this.path = [];
       this.pathIndex = 0;
       this.investigating = false;
+      this.speed = this.baseSpeed; // 순찰 모드로 복귀 시 속도 복원
       return;
     }
     this.patrolPath = nodes;
     this.path = nodes.slice();
     this.pathIndex = 0;
     this.investigating = false;
+    this.speed = this.baseSpeed; // 순찰 모드로 복귀 시 속도 복원
     // 순찰 경로 시작 시 blocked 상태 리셋
     this.blockedCount = 0;
     this.stuckTimer = 0;
@@ -49,6 +52,15 @@ export class Guard extends Entity {
     this.path = path.map(node => ({ ...node, action: 'move' }));
     this.pathIndex = 0;
     this.investigating = investigating;
+    
+    // 조사 모드일 때 속도 2배 증가
+    if (investigating) {
+      this.speed = this.baseSpeed * 2;
+      console.log(`🚨 Guard investigating: speed increased to ${this.speed.toFixed(1)}`);
+    } else {
+      this.speed = this.baseSpeed;
+    }
+    
     // 새 경로 시작 시 blocked 상태 리셋
     this.blockedCount = 0;
     this.stuckTimer = 0;

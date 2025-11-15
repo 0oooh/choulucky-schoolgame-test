@@ -34,7 +34,7 @@ import { distance, chance, pickRandom, rand } from './core/utils.js';
 import { SpriteRenderer } from './ui/spriteRenderer.js';
 
 class GameController {
-  constructor({ canvas, speechLayerNode, dialogueForm, dialogueInput, modeSwitch, messageBanner, batteryHud, investigatingAlert, gridToggle }) {
+  constructor({ canvas, speechLayerNode, dialogueForm, dialogueInput, modeSwitch, messageBanner, batteryHud, investigatingAlert, gridToggle, cutsceneContainer, cutsceneVideo, bgmToggle, chaseBgm }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.input = new InputManager();
@@ -58,11 +58,17 @@ class GameController {
     this.guardPatrolPath = [];
     this.debugColliders = false; // 디버그 모드 (D 키로 토글)
     this.showGrid = false; // 그리드 표시 여부
+    this.paused = false; // 게임 일시정지 상태
+    this.bgmEnabled = true; // BGM 활성화 여부
 
     this.speechLayer = new SpeechLayer(speechLayerNode);
     this.messageBanner = new MessageBanner(messageBanner);
     this.batteryHud = new BatteryHud(batteryHud);
     this.investigatingAlert = investigatingAlert;
+    this.cutsceneContainer = cutsceneContainer;
+    this.cutsceneVideo = cutsceneVideo;
+    this.bgmToggle = bgmToggle;
+    this.chaseBgm = chaseBgm;
 
     this.gemini = new GeminiService();
     this.dialogueManager = new DialogueManager({ speechLayer: this.speechLayer, gemini: this.gemini });
@@ -106,6 +112,17 @@ class GameController {
     this.gridToggle.addEventListener('change', () => {
       this.showGrid = this.gridToggle.checked;
       console.log(`🔲 Grid visualization: ${this.showGrid ? 'ON' : 'OFF'}`);
+    });
+
+    this.bgmToggle.addEventListener('change', () => {
+      this.bgmEnabled = this.bgmToggle.checked;
+      console.log(`🎵 BGM: ${this.bgmEnabled ? 'ON' : 'OFF'}`);
+      
+      // BGM이 꺼지면 즉시 정지
+      if (!this.bgmEnabled && this.chaseBgm && !this.chaseBgm.paused) {
+        this.chaseBgm.pause();
+        this.chaseBgm.currentTime = 0;
+      }
     });
 
     this.dialogueForm.addEventListener('submit', (event) => {
@@ -433,6 +450,7 @@ class GameController {
     this.thiefStallTimer = 0;
     this.thiefPathTimer = 0;
     this.investigatingAlert.classList.add('hidden'); // 모드 전환 시 경고 숨김
+    this.stopChaseBgm(); // 모드 전환 시 BGM 정지
     if (mode === MODES.DAY) {
       this.setupDayMode();
     } else {
@@ -504,6 +522,8 @@ class GameController {
         console.log('✅ Guard arrived at noise source, resuming patrol');
         this.noiseEvent = null;
         this.guard.investigating = false;
+        this.guard.speed = this.guard.baseSpeed; // 속도 복원
+        this.stopChaseBgm(); // BGM 정지
         this.resumePatrolFromNearestPoint();
       }
       
@@ -514,6 +534,8 @@ class GameController {
           console.warn(`⚠️ Guard failed to reach noise source (${Math.round(distToTarget)}px away), resuming patrol`);
           this.noiseEvent = null;
           this.guard.investigating = false;
+          this.guard.speed = this.guard.baseSpeed; // 속도 복원
+          this.stopChaseBgm(); // BGM 정지
           this.resumePatrolFromNearestPoint();
         }
       }
@@ -531,12 +553,86 @@ class GameController {
         this.messageBanner.show('배터리를 수집했습니다! (소음 발생)', 5);
         this.dialogueManager.speak(this.player, '배터리를 챙겼다...', { tone: 'night', hold: 2.5 });
         this.triggerNoiseEvent(battery.position);
+        
+        // 비디오 컷씬 재생
+        this.playCutscene();
+        
         if (this.collectedBatteries >= BATTERY_COUNT) {
           this.handleNightVictory();
         }
         break;
       }
     }
+  }
+
+  playCutscene() {
+    if (!this.cutsceneContainer || !this.cutsceneVideo) return;
+    
+    // 게임 일시정지
+    this.paused = true;
+    
+    // 비디오 컨테이너 표시
+    this.cutsceneContainer.classList.remove('hidden');
+    
+    // 비디오 재생
+    this.cutsceneVideo.currentTime = 0;
+    this.cutsceneVideo.play().catch(err => {
+      console.error('비디오 재생 실패:', err);
+      this.cutsceneContainer.classList.add('hidden');
+      this.paused = false; // 실패 시 게임 재개
+    });
+    
+    // 비디오 종료 시 숨김 처리 및 게임 재개
+    const onVideoEnd = () => {
+      this.cutsceneContainer.classList.add('hidden');
+      this.cutsceneVideo.removeEventListener('ended', onVideoEnd);
+      this.paused = false; // 게임 재개
+      
+      // 컷씬이 끝나면 BGM 재생 (조사 시작)
+      this.playChaseBgm();
+    };
+    
+    this.cutsceneVideo.addEventListener('ended', onVideoEnd);
+    
+    // ESC 키나 클릭으로 스킵 가능
+    const skipCutscene = () => {
+      this.cutsceneVideo.pause();
+      this.cutsceneContainer.classList.add('hidden');
+      this.cutsceneVideo.removeEventListener('ended', onVideoEnd);
+      this.cutsceneContainer.removeEventListener('click', skipCutscene);
+      document.removeEventListener('keydown', escapeHandler);
+      this.paused = false; // 게임 재개
+      
+      // 스킵해도 BGM 재생 (조사 시작)
+      this.playChaseBgm();
+    };
+    
+    const escapeHandler = (e) => {
+      if (e.key === 'Escape') {
+        skipCutscene();
+      }
+    };
+    
+    this.cutsceneContainer.addEventListener('click', skipCutscene, { once: true });
+    document.addEventListener('keydown', escapeHandler, { once: true });
+  }
+
+  playChaseBgm() {
+    if (!this.chaseBgm || !this.bgmEnabled) return;
+    
+    this.chaseBgm.currentTime = 0;
+    this.chaseBgm.play().catch(err => {
+      console.error('BGM 재생 실패:', err);
+    });
+    console.log('🎵 Chase BGM started');
+  }
+
+  stopChaseBgm() {
+    if (!this.chaseBgm) return;
+    
+    this.chaseBgm.pause();
+    this.chaseBgm.currentTime = 0;
+    console.log('🎵 Chase BGM stopped');
   }
 
   triggerNoiseEvent(position) {
@@ -762,12 +858,14 @@ class GameController {
         this.guard.pathIndex = 0;
         this.guard.investigating = false;
         this.guard.scanning = false;
+        this.guard.speed = this.guard.baseSpeed; // 속도 복원
         return;
       }
     }
 
     // 경로 찾기 실패시 그냥 처음부터 순찰 재개
     console.warn('Failed to find path to nearest patrol point, resuming from start');
+    this.guard.speed = this.guard.baseSpeed; // 속도 복원
     this.guard.setPatrolPath(this.guardPatrolPath);
   }
 
@@ -1069,7 +1167,12 @@ class GameController {
   loop(timestamp) {
     const dt = Math.min((timestamp - this.lastTime) / 1000, 0.033);
     this.lastTime = timestamp;
-    this.update(dt);
+    
+    // 일시정지 상태가 아닐 때만 업데이트
+    if (!this.paused) {
+      this.update(dt);
+    }
+    
     this.render();
     requestAnimationFrame(this.loop.bind(this));
   }
@@ -1085,6 +1188,10 @@ const controller = new GameController({
   batteryHud: document.getElementById('batteryHud'),
   investigatingAlert: document.getElementById('investigatingAlert'),
   gridToggle: document.getElementById('gridToggle'),
+  cutsceneContainer: document.getElementById('cutsceneContainer'),
+  cutsceneVideo: document.getElementById('cutsceneVideo'),
+  bgmToggle: document.getElementById('bgmToggle'),
+  chaseBgm: document.getElementById('chaseBgm'),
 });
 
 export default controller;
