@@ -5,32 +5,79 @@ export class GeminiService {
     this.apiKey = config.apiKey;
     this.model = config.model;
     this.baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
+    this.lastRequestTime = 0;
+    this.minRequestInterval = 5000; // 최소 5초 간격 (분당 12회 제한)
+    this.requestQueue = Promise.resolve();
   }
 
   get active() {
     return Boolean(this.apiKey);
   }
 
-  async request(prompt) {
-    if (!this.active) return null;
-    const url = `${this.baseUrl}/${this.model}:generateContent?key=${this.apiKey}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.9, topK: 32, candidateCount: 1 },
-      }),
-    });
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
+  // 요청을 큐에 넣어서 순차적으로 처리
+  async queueRequest(fn) {
+    this.requestQueue = this.requestQueue
+      .then(() => fn())
+      .catch(() => fn()); // 이전 요청 실패해도 다음 요청 처리
+    return this.requestQueue;
+  }
+
+  // 대기 시간 계산
+  async waitForRateLimit() {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    if (timeSinceLastRequest < this.minRequestInterval) {
+      const waitTime = this.minRequestInterval - timeSinceLastRequest;
+      console.log(`⏱️ Rate limit: waiting ${Math.round(waitTime / 1000)}s...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
     }
-    const data = await response.json();
-    const text =
-      data?.candidates?.[0]?.content?.parts
-        ?.map((part) => part.text)
-        .join('') ?? '';
-    return text.trim();
+    this.lastRequestTime = Date.now();
+  }
+
+  async request(prompt, retries = 2) {
+    if (!this.active) return null;
+    
+    return this.queueRequest(async () => {
+      await this.waitForRateLimit();
+      
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const url = `${this.baseUrl}/${this.model}:generateContent?key=${this.apiKey}`;
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.9, topK: 32, candidateCount: 1 },
+            }),
+          });
+          
+          if (response.status === 429) {
+            // Rate limit 에러 - 더 오래 대기 후 재시도
+            const waitTime = (attempt + 1) * 10000; // 10초, 20초, 30초...
+            console.warn(`⚠️ Rate limit hit (429), waiting ${waitTime / 1000}s before retry ${attempt + 1}/${retries}...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
+          
+          if (!response.ok) {
+            throw new Error(`Gemini API error: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          const text =
+            data?.candidates?.[0]?.content?.parts
+              ?.map((part) => part.text)
+              .join('') ?? '';
+          return text.trim();
+        } catch (error) {
+          if (attempt === retries) {
+            throw error; // 마지막 시도에서도 실패하면 에러 던지기
+          }
+          console.warn(`🔄 Request failed, retrying (${attempt + 1}/${retries})...`);
+        }
+      }
+    });
   }
 
   async chat({ npcPrompt, userText }) {

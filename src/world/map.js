@@ -604,11 +604,11 @@ export class SchoolMap {
 
   render(ctx, mode, debugColliders = false) {
     ctx.save();
-    ctx.fillStyle = mode === 'day' ? '#cfd9ef' : '#2a3545'; // 밤 배경 더 밝게
+    ctx.fillStyle = mode === 'day' ? '#cfd9ef' : '#3a4555'; // 밤 배경 더 밝게 (#2a3545 → #3a4555)
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     // hallway base
-    ctx.fillStyle = mode === 'day' ? '#b6c1e0' : '#303d52'; // 복도 더 밝게
+    ctx.fillStyle = mode === 'day' ? '#b6c1e0' : '#405060'; // 복도 더 밝게 (#303d52 → #405060)
     ctx.fillRect(this.hallwayRect.x, this.hallwayRect.y, this.hallwayRect.width, this.hallwayRect.height);
 
     // classrooms

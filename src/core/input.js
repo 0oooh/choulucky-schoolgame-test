@@ -9,6 +9,10 @@ const KEY_MAP = {
   d: 'right',
   f: 'interact',
   D: 'debug',
+  '=': 'zoomIn',
+  '+': 'zoomIn',
+  '-': 'zoomOut',
+  '_': 'zoomOut',
 };
 
 export class InputManager {

@@ -30,3 +30,7 @@ export const GEMINI_CONFIG = {
 export const HEARING_NOISE = ['...', '...'];
 
 export const BATTERY_COUNT = 5;
+
+// 카메라 설정
+export const CAMERA_ZOOM = 1.8; // 기본 줌 레벨 (1.8 = 180% 확대, 뱀서라이크 스타일)
+export const CAMERA_SMOOTHING = 0.12; // 카메라 부드러움 (0~1, 낮을수록 부드러움)

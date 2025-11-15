@@ -110,14 +110,22 @@ const drawPolygon = (ctx, guard, points) => {
   ctx.closePath();
 };
 
-export function renderNightLighting(ctx, guard, obstacles = [], dayTexture = null) {
-  const polygon = guard ? buildFovPolygon(guard, obstacles) : [];
-
+// 카메라 변환 내에서 호출 - 월드 좌표로 렌더링
+export function renderNightLighting(ctx, guard, obstacles = [], dayTexture = null, camera = null) {
+  if (!guard) return;
+  
+  const polygon = buildFovPolygon(guard, obstacles);
+  
+  // 경비원의 시야 원뿔 영역에 day 텍스처 그리기
   if (polygon.length > 1 && dayTexture) {
     ctx.save();
     drawPolygon(ctx, guard, polygon);
     ctx.clip();
+    
+    // day 텍스처는 이미 카메라 변환이 적용되어 있음
     ctx.drawImage(dayTexture, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    // 경비원 시야에 그라데이션 추가
     const gradient = ctx.createRadialGradient(
       guard.position.x,
       guard.position.y,
@@ -139,17 +147,8 @@ export function renderNightLighting(ctx, guard, obstacles = [], dayTexture = nul
     );
     ctx.restore();
   }
-
-  ctx.save();
-  ctx.fillStyle = 'rgba(3, 5, 15, 0.75)'; // 0.94 → 0.75로 밝게 조정
-  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-  if (polygon.length > 1) {
-    ctx.globalCompositeOperation = 'destination-out';
-    drawPolygon(ctx, guard, polygon);
-    ctx.fill();
-  }
-  ctx.restore();
-
+  
+  // 시야 원뿔에 밝은 후광 추가
   if (polygon.length > 1) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -174,4 +173,43 @@ export function renderNightLighting(ctx, guard, obstacles = [], dayTexture = nul
     );
     ctx.restore();
   }
+}
+
+// 화면 전체를 어둡게 하고 시야 부분만 밝게 (카메라 변환 후 별도 호출)
+export function renderNightOverlay(ctx, guard, obstacles = [], camera = null) {
+  if (!guard) {
+    // 경비원이 없으면 전체 어둡게
+    ctx.save();
+    ctx.fillStyle = 'rgba(3, 5, 15, 0.5)'; // 0.75 → 0.5로 밝게 조정
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.restore();
+    return;
+  }
+  
+  const polygon = buildFovPolygon(guard, obstacles);
+  
+  ctx.save();
+  ctx.fillStyle = 'rgba(3, 5, 15, 0.5)'; // 0.75 → 0.5로 밝게 조정
+  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  
+  // 시야 부분만 투명하게 (구멍 뚫기)
+  // 월드 좌표를 화면 좌표로 변환해서 그리기
+  if (polygon.length > 1 && camera) {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    
+    // 경비원 위치를 화면 좌표로 변환
+    const guardScreen = camera.worldToScreen(guard.position.x, guard.position.y);
+    ctx.moveTo(guardScreen.x, guardScreen.y);
+    
+    // 각 폴리곤 포인트를 화면 좌표로 변환
+    polygon.forEach((point) => {
+      const screenPoint = camera.worldToScreen(point.x, point.y);
+      ctx.lineTo(screenPoint.x, screenPoint.y);
+    });
+    
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
 }

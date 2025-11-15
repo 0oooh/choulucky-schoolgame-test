@@ -26,9 +26,16 @@
           </label>
         </div>
         <div class="mode-toggle" style="margin-left: 20px;">
-          <span>BGM</span>
+          <span>효과음</span>
           <label class="switch">
             <input type="checkbox" id="bgmToggle" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="mode-toggle" style="margin-left: 20px;">
+          <span>음악</span>
+          <label class="switch">
+            <input type="checkbox" id="musicToggle" checked />
             <span class="slider"></span>
           </label>
         </div>
@@ -48,6 +55,24 @@
         </div>
         <audio id="chaseBgm" loop preload="auto">
           <source src="./assets/bgm/아오오니 브금.mp3" type="audio/mpeg" />
+        </audio>
+        <audio id="principalBgm" preload="auto">
+          <source src="./assets/bgm/비킴-웃지말게.m4a" type="audio/mp4" />
+        </audio>
+        <audio id="dayBgm" loop preload="auto">
+          <source src="./assets/music/지능이 떨어지는 브금 [r2ko422xW0w].mp3" type="audio/mpeg" />
+        </audio>
+        <audio id="nightBgm" loop preload="auto">
+          <source src="./assets/music/최신판 무서운이야기 단골 공포브금(BGM) 베스트 모음 ｜ 코비엣TV ｜수면음악｜공부음….mp3" type="audio/mpeg" />
+        </audio>
+        <audio id="caughtSfx" preload="auto">
+          <source src="./assets/bgm/시리안-꼼짝마.m4a" type="audio/mp4" />
+        </audio>
+        <audio id="approachSfx1" preload="auto">
+          <source src="./assets/bgm/쵸로키-꿇어라.m4a" type="audio/mp4" />
+        </audio>
+        <audio id="approachSfx2" preload="auto">
+          <source src="./assets/bgm/쵸로키-야이새끼야.m4a" type="audio/mp4" />
         </audio>
       </main>
       <footer>

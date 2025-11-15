@@ -10,6 +10,7 @@ export class DialogueManager {
     this.channels = new Map();
     this.player = null;
     this.mode = MODES.DAY;
+    this.camera = null; // 카메라 참조
   }
 
   reset() {
@@ -19,6 +20,10 @@ export class DialogueManager {
 
   bindPlayer(player) {
     this.player = player;
+  }
+  
+  bindCamera(camera) {
+    this.camera = camera;
   }
 
   setMode(mode) {
@@ -105,11 +110,22 @@ export class DialogueManager {
       if (!entity) return;
       const clarity = this.calcClarity(entity);
       const noisyText = this.applyNoise(displayText || state.fullText, clarity);
+      
+      // 월드 좌표를 화면 좌표로 변환
+      let screenX = entity.position.x;
+      let screenY = entity.position.y - entity.radius - 40;
+      
+      if (this.camera) {
+        const screenPos = this.camera.worldToScreen(entity.position.x, entity.position.y - entity.radius - 40);
+        screenX = screenPos.x;
+        screenY = screenPos.y;
+      }
+      
       this.speechLayer.update({
         id,
         text: noisyText,
-        x: entity.position.x,
-        y: entity.position.y - entity.radius - 40,
+        x: screenX,
+        y: screenY,
         affinity: Math.min(entity.affinity || 0, 1),
         tone: state.tone,
         visible: state.visible,

@@ -6,6 +6,8 @@ import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
   HEARING_RINGS,
+  CAMERA_ZOOM,
+  CAMERA_SMOOTHING,
 } from './core/constants.js';
 import { SchoolMap } from './world/map.js';
 import { Player } from './entities/player.js';
@@ -28,13 +30,14 @@ import { GeminiService } from './dialogue/geminiService.js';
 import { MessageBanner } from './ui/messageBanner.js';
 import { BatteryHud } from './ui/batteryHud.js';
 import { Pathfinder } from './systems/pathfinding.js';
-import { renderNightLighting } from './systems/nightLighting.js';
+import { renderNightLighting, renderNightOverlay } from './systems/nightLighting.js';
 import { hasLineOfSight } from './systems/lineOfSight.js';
 import { distance, chance, pickRandom, rand } from './core/utils.js';
 import { SpriteRenderer } from './ui/spriteRenderer.js';
+import { Camera } from './systems/camera.js';
 
 class GameController {
-  constructor({ canvas, speechLayerNode, dialogueForm, dialogueInput, modeSwitch, messageBanner, batteryHud, investigatingAlert, gridToggle, cutsceneContainer, cutsceneVideo, bgmToggle, chaseBgm }) {
+  constructor({ canvas, speechLayerNode, dialogueForm, dialogueInput, modeSwitch, messageBanner, batteryHud, investigatingAlert, gridToggle, cutsceneContainer, cutsceneVideo, bgmToggle, musicToggle, chaseBgm, dayBgm, nightBgm }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.input = new InputManager();
@@ -59,7 +62,13 @@ class GameController {
     this.debugColliders = false; // 디버그 모드 (D 키로 토글)
     this.showGrid = false; // 그리드 표시 여부
     this.paused = false; // 게임 일시정지 상태
-    this.bgmEnabled = true; // BGM 활성화 여부
+    this.bgmEnabled = true; // 효과음 활성화 여부
+    this.musicEnabled = true; // 음악 활성화 여부
+    this.wasInOffice = false; // 교장실에 있었는지 추적
+    
+    // 카메라 시스템
+    this.camera = new Camera({ zoom: CAMERA_ZOOM, smoothing: CAMERA_SMOOTHING });
+    this.camera.setBaseZoom(CAMERA_ZOOM);
 
     this.speechLayer = new SpeechLayer(speechLayerNode);
     this.messageBanner = new MessageBanner(messageBanner);
@@ -68,7 +77,15 @@ class GameController {
     this.cutsceneContainer = cutsceneContainer;
     this.cutsceneVideo = cutsceneVideo;
     this.bgmToggle = bgmToggle;
+    this.musicToggle = musicToggle;
     this.chaseBgm = chaseBgm;
+    this.dayBgm = dayBgm;
+    this.nightBgm = nightBgm;
+    this.principalBgm = document.getElementById('principalBgm');
+    this.caughtSfx = document.getElementById('caughtSfx');
+    this.approachSfx1 = document.getElementById('approachSfx1');
+    this.approachSfx2 = document.getElementById('approachSfx2');
+    this.lastApproachSfxNpc = null; // 마지막으로 효과음을 재생한 NPC ID
 
     this.gemini = new GeminiService();
     this.dialogueManager = new DialogueManager({ speechLayer: this.speechLayer, gemini: this.gemini });
@@ -96,6 +113,24 @@ class GameController {
         console.log(`🔧 Debug mode (colliders): ${this.debugColliders ? 'ON' : 'OFF'}`);
       }
     });
+    
+    this.input.onKey('zoomIn', (pressed) => {
+      if (pressed) {
+        const newZoom = this.camera.zoom + 0.2;
+        this.camera.setZoom(newZoom, true);
+        this.camera.setBaseZoom(newZoom);
+        console.log(`🔍 Zoom: ${this.camera.zoom.toFixed(1)}x`);
+      }
+    });
+    
+    this.input.onKey('zoomOut', (pressed) => {
+      if (pressed) {
+        const newZoom = this.camera.zoom - 0.2;
+        this.camera.setZoom(newZoom, true);
+        this.camera.setBaseZoom(newZoom);
+        console.log(`🔍 Zoom: ${this.camera.zoom.toFixed(1)}x`);
+      }
+    });
 
     this.bindEvents();
     this.setMode(MODES.DAY);
@@ -116,12 +151,52 @@ class GameController {
 
     this.bgmToggle.addEventListener('change', () => {
       this.bgmEnabled = this.bgmToggle.checked;
-      console.log(`🎵 BGM: ${this.bgmEnabled ? 'ON' : 'OFF'}`);
+      console.log(`🎵 효과음: ${this.bgmEnabled ? 'ON' : 'OFF'}`);
       
-      // BGM이 꺼지면 즉시 정지
-      if (!this.bgmEnabled && this.chaseBgm && !this.chaseBgm.paused) {
-        this.chaseBgm.pause();
-        this.chaseBgm.currentTime = 0;
+      // 효과음이 꺼지면 즉시 정지
+      if (!this.bgmEnabled) {
+        if (this.chaseBgm && !this.chaseBgm.paused) {
+          this.chaseBgm.pause();
+          this.chaseBgm.currentTime = 0;
+        }
+        if (this.principalBgm && !this.principalBgm.paused) {
+          this.principalBgm.pause();
+          this.principalBgm.currentTime = 0;
+        }
+        if (this.caughtSfx && !this.caughtSfx.paused) {
+          this.caughtSfx.pause();
+          this.caughtSfx.currentTime = 0;
+        }
+        if (this.approachSfx1 && !this.approachSfx1.paused) {
+          this.approachSfx1.pause();
+          this.approachSfx1.currentTime = 0;
+        }
+        if (this.approachSfx2 && !this.approachSfx2.paused) {
+          this.approachSfx2.pause();
+          this.approachSfx2.currentTime = 0;
+        }
+      }
+    });
+
+    this.musicToggle.addEventListener('change', () => {
+      this.musicEnabled = this.musicToggle.checked;
+      console.log(`🎶 음악: ${this.musicEnabled ? 'ON' : 'OFF'}`);
+      
+      // 음악이 꺼지면 즉시 정지
+      if (!this.musicEnabled) {
+        if (this.dayBgm && !this.dayBgm.paused) {
+          this.dayBgm.pause();
+        }
+        if (this.nightBgm && !this.nightBgm.paused) {
+          this.nightBgm.pause();
+        }
+      } else {
+        // 음악이 켜지면 현재 모드에 맞는 음악 재생
+        if (this.mode === MODES.DAY) {
+          this.playDayBgm();
+        } else if (this.mode === MODES.NIGHT) {
+          this.playNightBgm();
+        }
       }
     });
 
@@ -150,13 +225,19 @@ class GameController {
     this.noiseEvent = null;
     this.guard = null;
     this.thief = null;
+    this.wasInOffice = false; // 교장실 상태 초기화
 
     this.player = new Player({ input: this.input, x: this.map.hallwayRect.x + 160, y: this.map.hallwayRect.y + 120, color: '#4ed37e' });
     this.player.markerColor = '#4ed37e';
     this.registerEntity(this.player);
     this.applySprite(this.player, 'player');
     this.dialogueManager.bindPlayer(this.player);
+    this.dialogueManager.bindCamera(this.camera); // 카메라 연결
+    this.camera.setTarget(this.player); // 카메라가 플레이어를 따라감
     this.principalGreeted = false;
+    
+    // 낮 배경음악 재생
+    this.playDayBgm();
 
     // Principal B
     const seat = this.map.getOfficeSeat();
@@ -287,6 +368,12 @@ class GameController {
     this.registerEntity(this.player);
     this.applySprite(this.player, 'player');
     this.dialogueManager.bindPlayer(this.player);
+    this.dialogueManager.bindCamera(this.camera); // 카메라 연결
+    this.camera.setTarget(this.player); // 카메라가 플레이어를 따라감
+    
+    // 낮 배경음악 정지, 밤 배경음악 재생
+    this.stopDayBgm();
+    this.playNightBgm();
 
     // 경비원을 순찰 시작 위치에 배치
     const guardStartX = this.map.hallwayRect.x + 100;
@@ -344,9 +431,13 @@ class GameController {
 
 
   renderDayBuffer() {
-    if (!this.dayCtx) return;
+    if (!this.dayCtx || !this.camera) return;
     this.dayCtx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    // day 버퍼에도 카메라 변환 적용
+    this.camera.applyTransform(this.dayCtx);
     this.map.render(this.dayCtx, MODES.DAY, this.debugColliders);
+    this.camera.resetTransform(this.dayCtx);
   }
 
   buildPatrolPath(nodes) {
@@ -450,7 +541,8 @@ class GameController {
     this.thiefStallTimer = 0;
     this.thiefPathTimer = 0;
     this.investigatingAlert.classList.add('hidden'); // 모드 전환 시 경고 숨김
-    this.stopChaseBgm(); // 모드 전환 시 BGM 정지
+    this.stopAllBgm(); // 모드 전환 시 모든 효과음 정지
+    this.stopAllMusic(); // 모드 전환 시 모든 음악 정지
     if (mode === MODES.DAY) {
       this.setupDayMode();
     } else {
@@ -475,14 +567,99 @@ class GameController {
   updateDay(dt) {
     this.groupScripts.forEach((script) => script.update(dt));
     this.handleRandomSpeech(dt);
-    if (!this.principalGreeted && this.map.isInsideOffice(this.player.position)) {
-      this.dialogueManager.speak(
-        this.principal,
-        '안녕하신가 천민. 허락 없이 들어와도 나를 이길 순 없네.',
-        { tone: 'day', hold: 4 }
-      );
-      this.principalGreeted = true;
+    
+    const isInOffice = this.map.isInsideOffice(this.player.position);
+    
+    // 교장실에 처음 들어갔을 때 (밖에서 안으로 진입)
+    if (isInOffice && !this.wasInOffice) {
+      // 처음 진입 시에만 대사 출력
+      if (!this.principalGreeted) {
+        this.dialogueManager.speak(
+          this.principal,
+          '안녕하신가 천민. 허락 없이 들어와도 나를 이길 순 없네.',
+          { tone: 'day', hold: 4 }
+        );
+        this.principalGreeted = true;
+      }
+      
+      // 교장실 진입 시 매번 BGM 재생
+      this.playPrincipalBgm();
     }
+    
+    // 교장실 상태 업데이트
+    this.wasInOffice = isInOffice;
+  }
+
+  playDayBgm() {
+    if (!this.dayBgm || !this.musicEnabled) return;
+    
+    // 이미 재생 중이면 다시 시작하지 않음
+    if (!this.dayBgm.paused) return;
+    
+    // 측정값: -22.5 dB → 목표: -24 dB → -1.5 dB 조정 → 0.84배 → 0.29
+    this.dayBgm.volume = 0.29;
+    this.dayBgm.play().catch(err => {
+      console.error('낮 배경음악 재생 실패:', err);
+    });
+    console.log('🎶 Day BGM started');
+  }
+  
+  stopDayBgm() {
+    if (!this.dayBgm) return;
+    
+    this.dayBgm.pause();
+    this.dayBgm.currentTime = 0;
+    console.log('🎶 Day BGM stopped');
+  }
+  
+  playNightBgm() {
+    if (!this.nightBgm || !this.musicEnabled) return;
+    
+    // 이미 재생 중이면 다시 시작하지 않음
+    if (!this.nightBgm.paused) return;
+    
+    // 측정값: -25.5 dB → 목표: -24 dB → +1.5 dB 조정 → 1.19배 → 0.42
+    this.nightBgm.volume = 0.42;
+    this.nightBgm.play().catch(err => {
+      console.error('밤 배경음악 재생 실패:', err);
+    });
+    console.log('🎶 Night BGM started');
+  }
+  
+  stopNightBgm() {
+    if (!this.nightBgm) return;
+    
+    this.nightBgm.pause();
+    this.nightBgm.currentTime = 0;
+    console.log('🎶 Night BGM stopped');
+  }
+  
+  pauseNightBgm() {
+    if (!this.nightBgm || this.nightBgm.paused) return;
+    
+    this.nightBgm.pause();
+    console.log('⏸️ Night BGM paused');
+  }
+  
+  resumeNightBgm() {
+    if (!this.nightBgm || !this.nightBgm.paused || !this.musicEnabled) return;
+    
+    this.nightBgm.play().catch(err => {
+      console.error('밤 배경음악 재개 실패:', err);
+    });
+    console.log('▶️ Night BGM resumed');
+  }
+
+  playPrincipalBgm() {
+    if (!this.principalBgm || !this.bgmEnabled) return;
+    
+    this.principalBgm.currentTime = 0;
+    // 측정값: -29.6 dB → 목표: -20 dB → +9.6 dB 조정 → 3.02배 → 1.0 (max)
+    this.principalBgm.volume = 1.0;
+    this.principalBgm.play().catch(err => {
+      console.error('교장실 효과음 재생 실패:', err);
+    });
+    console.log('🎵 Principal SFX started');
   }
 
   updateNight(dt) {
@@ -620,11 +797,16 @@ class GameController {
   playChaseBgm() {
     if (!this.chaseBgm || !this.bgmEnabled) return;
     
+    // 아오오니 브금 시작 시 밤 배경음악 일시정지
+    this.pauseNightBgm();
+    
     this.chaseBgm.currentTime = 0;
+    // 측정값: -16.1 dB → 목표: -18 dB → -1.9 dB 조정 → 0.80배 → 0.40
+    this.chaseBgm.volume = 0.40;
     this.chaseBgm.play().catch(err => {
       console.error('BGM 재생 실패:', err);
     });
-    console.log('🎵 Chase BGM started');
+    console.log('🎵 Chase BGM started (Night BGM paused)');
   }
 
   stopChaseBgm() {
@@ -632,7 +814,40 @@ class GameController {
     
     this.chaseBgm.pause();
     this.chaseBgm.currentTime = 0;
-    console.log('🎵 Chase BGM stopped');
+    
+    // 아오오니 브금 종료 시 밤 배경음악 재개
+    if (this.mode === MODES.NIGHT) {
+      this.resumeNightBgm();
+    }
+    
+    console.log('🎵 Chase BGM stopped (Night BGM resumed)');
+  }
+
+  stopAllBgm() {
+    this.stopChaseBgm();
+    if (this.principalBgm && !this.principalBgm.paused) {
+      this.principalBgm.pause();
+      this.principalBgm.currentTime = 0;
+      console.log('🎵 Principal SFX stopped');
+    }
+    if (this.caughtSfx && !this.caughtSfx.paused) {
+      this.caughtSfx.pause();
+      this.caughtSfx.currentTime = 0;
+      console.log('💀 Caught SFX stopped');
+    }
+    if (this.approachSfx1 && !this.approachSfx1.paused) {
+      this.approachSfx1.pause();
+      this.approachSfx1.currentTime = 0;
+    }
+    if (this.approachSfx2 && !this.approachSfx2.paused) {
+      this.approachSfx2.pause();
+      this.approachSfx2.currentTime = 0;
+    }
+  }
+  
+  stopAllMusic() {
+    this.stopDayBgm();
+    this.stopNightBgm();
   }
 
   triggerNoiseEvent(position) {
@@ -654,6 +869,10 @@ class GameController {
       const pathWithAction = gridPath.map(p => ({ ...p, action: 'move' }));
       this.noiseEvent = { position, originalPosition: position };
       this.guard.followPath(pathWithAction, true);
+      
+      // 긴장 모드 활성화: 카메라 확대
+      this.camera.setTenseMode(true);
+      console.log('📹 Camera: Tense mode activated (zoom increased)');
     } else {
       console.error('❌ Failed to create grid path to noise source, guard continues patrol');
       this.noiseEvent = null;
@@ -814,6 +1033,9 @@ class GameController {
     if (scanPoints.length === 0) {
       console.warn('No scan points found, resuming from start');
       this.guard.setPatrolPath(this.guardPatrolPath);
+      // 긴장 모드 해제
+      this.camera.setTenseMode(false);
+      console.log('📹 Camera: Tense mode deactivated (zoom restored)');
       return;
     }
 
@@ -832,6 +1054,9 @@ class GameController {
     if (!nearestScanPoint) {
       console.warn('Could not find nearest scan point, resuming from start');
       this.guard.setPatrolPath(this.guardPatrolPath);
+      // 긴장 모드 해제
+      this.camera.setTenseMode(false);
+      console.log('📹 Camera: Tense mode deactivated (zoom restored)');
       return;
     }
 
@@ -859,6 +1084,10 @@ class GameController {
         this.guard.investigating = false;
         this.guard.scanning = false;
         this.guard.speed = this.guard.baseSpeed; // 속도 복원
+        
+        // 긴장 모드 해제
+        this.camera.setTenseMode(false);
+        console.log('📹 Camera: Tense mode deactivated (zoom restored)');
         return;
       }
     }
@@ -867,6 +1096,10 @@ class GameController {
     console.warn('Failed to find path to nearest patrol point, resuming from start');
     this.guard.speed = this.guard.baseSpeed; // 속도 복원
     this.guard.setPatrolPath(this.guardPatrolPath);
+    
+    // 긴장 모드 해제
+    this.camera.setTenseMode(false);
+    console.log('📹 Camera: Tense mode deactivated (zoom restored)');
   }
 
   handleNightVictory() {
@@ -879,9 +1112,25 @@ class GameController {
   triggerGameOver() {
     if (this.pendingReset) return;
     this.pendingReset = { mode: MODES.NIGHT, timer: 3 };
+    
+    // 게임오버 효과음 재생
+    this.playCaughtSfx();
+    
     this.dialogueManager.speak(this.guard, '거기 누굽니까!!!', { tone: 'night', hold: 3 });
     this.messageBanner.show('거기 누굽니까!!! 경비원에게 들켰습니다.', 3);
     setTimeout(() => this.setMode(MODES.NIGHT), 3200);
+  }
+  
+  playCaughtSfx() {
+    if (!this.caughtSfx || !this.bgmEnabled) return;
+    
+    this.caughtSfx.currentTime = 0;
+    // 측정값: -33.7 dB → 목표: -20 dB → +13.7 dB 조정 → 4.83배 → 0.96
+    this.caughtSfx.volume = 0.96;
+    this.caughtSfx.play().catch(err => {
+      console.error('게임오버 효과음 재생 실패:', err);
+    });
+    console.log('💀 Caught SFX started');
   }
 
   update(dt) {
@@ -896,6 +1145,7 @@ class GameController {
       }
     });
     this.player.update(dt);
+    this.camera.update(dt); // 카메라 업데이트
     if (this.mode === MODES.DAY) {
       this.updateDay(dt);
     } else {
@@ -923,7 +1173,13 @@ class GameController {
     const target = candidates[0] || null;
     if (target !== this.focusedNPC) {
       this.focusedNPC = target;
-      if (target) this.maybeAutoGreet(target);
+      if (target) {
+        this.maybeAutoGreet(target);
+        // 낮 모드에서만 접근 효과음 재생
+        if (this.mode === MODES.DAY) {
+          this.playRandomApproachSfx(target);
+        }
+      }
     }
     if (this.focusedNPC) {
       this.dialogueInput.disabled = false;
@@ -933,6 +1189,53 @@ class GameController {
       this.dialogueInput.placeholder = 'NPC에게 접근하면 대화할 수 있습니다';
       this.dialogueInput.value = '';
     }
+  }
+  
+  playRandomApproachSfx(npc) {
+    // 같은 NPC에게 연속으로 재생하지 않도록
+    if (this.lastApproachSfxNpc === npc.id) return;
+    
+    // 효과음이 꺼져있으면 재생하지 않음
+    if (!this.bgmEnabled) return;
+    
+    this.lastApproachSfxNpc = npc.id;
+    
+    // 1/3 확률로 3가지 중 하나 선택
+    const random = Math.random();
+    
+    if (random < 0.333) {
+      // 쵸로키-꿇어라
+      if (this.approachSfx1) {
+        this.approachSfx1.currentTime = 0;
+        // 측정값: -23.3 dB → 목표: -20 dB → +3.3 dB 조정 → 1.46배 → 0.73
+        this.approachSfx1.volume = 0.73;
+        this.approachSfx1.play().catch(err => {
+          console.error('접근 효과음1 재생 실패:', err);
+        });
+        console.log('🗣️ Approach SFX: 꿇어라');
+      }
+    } else if (random < 0.666) {
+      // 쵸로키-야이새끼야
+      if (this.approachSfx2) {
+        this.approachSfx2.currentTime = 0;
+        // 측정값: -38.6 dB → 목표: -20 dB → +18.6 dB 조정 → 8.51배 → 1.0 (max)
+        this.approachSfx2.volume = 1.0;
+        this.approachSfx2.play().catch(err => {
+          console.error('접근 효과음2 재생 실패:', err);
+        });
+        console.log('🗣️ Approach SFX: 야이새끼야');
+      }
+    } else {
+      // 아무것도 재생 안 함
+      console.log('🔇 Approach SFX: (silent)');
+    }
+    
+    // 잠시 후 같은 NPC에게도 다시 재생 가능하도록
+    setTimeout(() => {
+      if (this.lastApproachSfxNpc === npc.id) {
+        this.lastApproachSfxNpc = null;
+      }
+    }, 2000); // 2초 쿨다운
   }
 
   maybeAutoGreet(target) {
@@ -985,18 +1288,68 @@ class GameController {
   }
 
   render() {
-    this.renderDayBuffer();
     this.ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    // 낮 모드 버퍼 렌더링 (카메라 적용)
+    if (this.mode === MODES.NIGHT) {
+      this.renderDayBuffer();
+    }
+    
+    // 카메라 변환 적용
+    this.camera.applyTransform(this.ctx);
+    
+    // 월드 요소 렌더링 (카메라 영향 받음)
     this.map.render(this.ctx, this.mode, this.debugColliders);
     this.batteries.forEach((battery) => battery.draw(this.ctx));
     this.entities.forEach((entity) => entity.draw(this.ctx, this.mode));
-    if (this.mode === MODES.NIGHT) {
-      renderNightLighting(this.ctx, this.guard, this.map.obstacles, this.dayCanvas);
-    }
-    this.renderHearingOverlay();
+    
     if (this.showGrid) {
       this.renderNavigationGrid();
     }
+    
+    this.renderHearingOverlay();
+    
+    // 밤 조명 효과 - 경비원 시야 (카메라 변환 내)
+    if (this.mode === MODES.NIGHT && this.guard) {
+      renderNightLighting(this.ctx, this.guard, this.map.obstacles, this.dayCanvas, this.camera);
+    }
+    
+    // 카메라 변환 해제
+    this.camera.resetTransform(this.ctx);
+    
+    // 밤 어두운 오버레이 (화면 고정)
+    if (this.mode === MODES.NIGHT) {
+      // 어두운 오버레이를 전체 화면에 적용하되, 경비원 시야는 밝게
+      renderNightOverlay(this.ctx, this.guard, this.map.obstacles, this.camera);
+    }
+    
+    // 긴장 모드일 때 비네팅 효과 (화면 고정)
+    if (this.noiseEvent && this.guard && this.guard.investigating) {
+      this.renderVignette();
+    }
+  }
+  
+  renderVignette() {
+    const ctx = this.ctx;
+    const centerX = CANVAS_WIDTH / 2;
+    const centerY = CANVAS_HEIGHT / 2;
+    const maxRadius = Math.sqrt(centerX * centerX + centerY * centerY);
+    
+    // 방사형 그라데이션으로 비네팅 효과
+    const gradient = ctx.createRadialGradient(
+      centerX, centerY, maxRadius * 0.3,
+      centerX, centerY, maxRadius * 1.2
+    );
+    
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.1)');
+    gradient.addColorStop(0.8, 'rgba(0, 0, 0, 0.4)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.7)');
+    
+    ctx.save();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.restore();
   }
 
   renderNavigationGrid() {
@@ -1191,7 +1544,10 @@ const controller = new GameController({
   cutsceneContainer: document.getElementById('cutsceneContainer'),
   cutsceneVideo: document.getElementById('cutsceneVideo'),
   bgmToggle: document.getElementById('bgmToggle'),
+  musicToggle: document.getElementById('musicToggle'),
   chaseBgm: document.getElementById('chaseBgm'),
+  dayBgm: document.getElementById('dayBgm'),
+  nightBgm: document.getElementById('nightBgm'),
 });
 
 export default controller;
