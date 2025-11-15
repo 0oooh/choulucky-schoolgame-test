@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>한 층의 하루</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="top-bar">
+        <div class="logo">한 층의 하루</div>
+        <div class="mode-toggle">
+          <span>낮</span>
+          <label class="switch">
+            <input type="checkbox" id="modeSwitch" />
+            <span class="slider"></span>
+          </label>
+          <span>밤</span>
+        </div>
+        <div class="mode-toggle" style="margin-left: 20px;">
+          <span>그리드</span>
+          <label class="switch">
+            <input type="checkbox" id="gridToggle" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </header>
+      <main class="play-field">
+        <canvas id="gameCanvas" width="1280" height="720"></canvas>
+        <div id="overlay">
+          <div id="speechLayer"></div>
+          <div id="messageBanner" class="hidden"></div>
+          <div id="batteryHud"></div>
+          <div id="investigatingAlert" class="hidden">순찰중!</div>
+        </div>
+      </main>
+      <footer>
+        <form id="dialogueForm" class="dialogue-form">
+          <input
+            type="text"
+            id="dialogueInput"
+            placeholder="NPC에게 접근하면 대화할 수 있습니다"
+            autocomplete="off"
+            disabled
+          />
+        </form>
+      </footer>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
