@@ -24,7 +24,7 @@ export const PRINCIPAL_OFFICE = {
 };
 
 export const GEMINI_CONFIG = {
-  apiKey: 'AIzaSyChwBbGG8ZdisdoX6xlHCgBgua88kkIGIk',
+  apiKey: '',
   model: 'models/gemini-2.5-flash',
 };
 
