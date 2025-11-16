@@ -39,18 +39,34 @@
             <span class="slider"></span>
           </label>
         </div>
+        <div class="mode-toggle" style="margin-left: 20px;">
+          <span>청각 범위</span>
+          <label class="switch">
+            <input type="checkbox" id="hearingToggle" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
       </header>
       <main class="play-field">
         <canvas id="gameCanvas" width="1280" height="720"></canvas>
-        <div id="overlay">
-          <div id="speechLayer"></div>
-          <div id="messageBanner" class="hidden"></div>
-          <div id="batteryHud"></div>
-          <div id="investigatingAlert" class="hidden">순찰중!</div>
-        </div>
+          <div id="overlay">
+            <div id="speechLayer"></div>
+            <div id="messageBanner" class="hidden"></div>
+            <div id="batteryHud"></div>
+            <div id="investigatingAlert" class="hidden">순찰중!</div>
+            <button id="spitGumButton" class="spit-gum-button">껌 뱉기</button>
+            <button id="graffityButton" class="graffity-button">낙서하기</button>
+            <button id="lieDownButton" class="lie-down-button">드러눕기</button>
+            <button id="fireButton" class="fire-button">불장난</button>
+          </div>
         <div id="cutsceneContainer" class="hidden">
           <video id="cutsceneVideo" preload="auto">
             <source src="./assets/videos/download.MP4" type="video/mp4" />
+          </video>
+        </div>
+        <div id="schoolCutsceneContainer" class="hidden">
+          <video id="schoolCutsceneVideo" preload="auto">
+            <source src="./assets/videos/home_to_school_cutscene.mov" type="video/mp4" />
           </video>
         </div>
         <audio id="chaseBgm" loop preload="auto">
@@ -65,6 +81,12 @@
         <audio id="nightBgm" loop preload="auto">
           <source src="./assets/music/최신판 무서운이야기 단골 공포브금(BGM) 베스트 모음 ｜ 코비엣TV ｜수면음악｜공부음….mp3" type="audio/mpeg" />
         </audio>
+        <audio id="roomNightBgm" preload="auto">
+          <source src="./assets/music/16) 짱구는 못말려 BGM 해질무렵.mp3" type="audio/mpeg" />
+        </audio>
+        <audio id="roomMorningBgm" preload="auto">
+          <source src="./assets/music/짱구는 못말려에서 아침 또는 일상에서 나오는 브금 [YgBgTl2vyqs].mp3" type="audio/mpeg" />
+        </audio>
         <audio id="caughtSfx" preload="auto">
           <source src="./assets/bgm/시리안-꼼짝마.m4a" type="audio/mp4" />
         </audio>
@@ -74,6 +96,27 @@
         <audio id="approachSfx2" preload="auto">
           <source src="./assets/bgm/쵸로키-야이새끼야.m4a" type="audio/mp4" />
         </audio>
+        <audio id="spitSfx1" preload="auto">
+          <source src="./assets/bgm/캌퉤.m4a" type="audio/mp4" />
+        </audio>
+        <audio id="spitSfx2" preload="auto">
+          <source src="./assets/bgm/쵸로키-침발라놨다.m4a" type="audio/mp4" />
+        </audio>
+        <div id="sleepOverlay" class="sleep-overlay hidden">
+          <div class="sleep-message" id="sleepOverlayText">일단 자고 보자~</div>
+        </div>
+        <div id="lieDownOverlay" class="lie-down-overlay hidden">
+          <div class="lie-down-message" id="lieDownOverlayText">흠냐...</div>
+        </div>
+        <div id="roomChoice" class="room-choice hidden">
+          <div class="room-choice-card">
+            <p class="room-choice-title">어디로 갈까?</p>
+            <div class="room-choice-buttons">
+              <button id="stayHomeButton" type="button">집에 있기</button>
+              <button id="goSchoolButton" type="button" class="primary">등교하기</button>
+            </div>
+          </div>
+        </div>
       </main>
       <footer>
         <form id="dialogueForm" class="dialogue-form">

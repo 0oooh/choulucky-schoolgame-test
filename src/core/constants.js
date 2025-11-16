@@ -6,6 +6,7 @@ export const WORLD_ROWS = CANVAS_HEIGHT / TILE_SIZE;
 export const MODES = {
   DAY: 'day',
   NIGHT: 'night',
+  ROOM: 'room',
 };
 
 export const PLAYER_SPEED = 110;

@@ -13,6 +13,10 @@ const KEY_MAP = {
   '+': 'zoomIn',
   '-': 'zoomOut',
   '_': 'zoomOut',
+  '1': 'spitGum',
+  '2': 'graffity',
+  '3': 'lieDown',
+  '4': 'fire',
 };
 
 export class InputManager {
