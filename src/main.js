@@ -38,7 +38,7 @@ import { SpriteRenderer } from './ui/spriteRenderer.js';
 import { Camera } from './systems/camera.js';
 
 class GameController {
-  constructor({ canvas, speechLayerNode, dialogueForm, dialogueInput, modeSwitch, messageBanner, batteryHud, investigatingAlert, gridToggle, cutsceneContainer, cutsceneVideo, schoolCutsceneContainer, schoolCutsceneVideo, bgmToggle, musicToggle, hearingToggle, chaseBgm, dayBgm, nightBgm, spitGumButton, graffityButton, lieDownButton, fireButton }) {
+  constructor({ canvas, speechLayerNode, dialogueForm, dialogueInput, modeSwitch, messageBanner, batteryHud, investigatingAlert, gridToggle, cutsceneContainer, cutsceneVideo, schoolCutsceneContainer, schoolCutsceneVideo, lieDownCutsceneContainer, lieDownCutsceneVideo, sleepCutsceneContainer, sleepCutsceneVideo, bgmToggle, musicToggle, hearingToggle, chaseBgm, dayBgm, nightBgm, spitGumButton, graffityButton, lieDownButton, fireButton }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.input = new InputManager();
@@ -91,6 +91,10 @@ class GameController {
     this.cutsceneVideo = cutsceneVideo;
     this.schoolCutsceneContainer = schoolCutsceneContainer;
     this.schoolCutsceneVideo = schoolCutsceneVideo;
+    this.lieDownCutsceneContainer = lieDownCutsceneContainer;
+    this.lieDownCutsceneVideo = lieDownCutsceneVideo;
+    this.sleepCutsceneContainer = sleepCutsceneContainer;
+    this.sleepCutsceneVideo = sleepCutsceneVideo;
     this.bgmToggle = bgmToggle;
     this.musicToggle = musicToggle;
     this.hearingToggle = hearingToggle;
@@ -105,6 +109,10 @@ class GameController {
     this.approachSfx2 = document.getElementById('approachSfx2');
     this.spitSfx1 = document.getElementById('spitSfx1');
     this.spitSfx2 = document.getElementById('spitSfx2');
+    this.fireSfx = document.getElementById('fireSfx');
+    this.graffityStartSfx = document.getElementById('graffityStartSfx');
+    this.graffityLoopSfx = document.getElementById('graffityLoopSfx');
+    this.graffityEndSfx = document.getElementById('graffityEndSfx');
     this.lastApproachSfxNpc = null; // 마지막으로 효과음을 재생한 NPC ID
     this.sleepOverlay = document.getElementById('sleepOverlay');
     this.sleepOverlayText = document.getElementById('sleepOverlayText');
@@ -172,11 +180,13 @@ class GameController {
         // 낙서 모드 시작 - 현재 위치 저장
         this.lastGraffityPos = { ...this.player.position };
         this.graffityButton?.classList.add('active');
+        this.startGraffitySfx();
         console.log('✏️ 낙서 모드 시작');
       } else {
         // 낙서 모드 종료
         this.lastGraffityPos = null;
         this.graffityButton?.classList.remove('active');
+        this.endGraffitySfx();
         console.log('✏️ 낙서 모드 종료');
       }
     });
@@ -241,6 +251,22 @@ class GameController {
           this.approachSfx2.pause();
           this.approachSfx2.currentTime = 0;
         }
+        if (this.fireSfx && !this.fireSfx.paused) {
+          this.fireSfx.pause();
+          this.fireSfx.currentTime = 0;
+        }
+        if (this.graffityStartSfx && !this.graffityStartSfx.paused) {
+          this.graffityStartSfx.pause();
+          this.graffityStartSfx.currentTime = 0;
+        }
+        if (this.graffityLoopSfx && !this.graffityLoopSfx.paused) {
+          this.graffityLoopSfx.pause();
+          this.graffityLoopSfx.currentTime = 0;
+        }
+        if (this.graffityEndSfx && !this.graffityEndSfx.paused) {
+          this.graffityEndSfx.pause();
+          this.graffityEndSfx.currentTime = 0;
+        }
       }
     });
 
@@ -291,6 +317,7 @@ class GameController {
       this.isGraffityMode = true;
       this.lastGraffityPos = { ...this.player.position };
       this.graffityButton?.classList.add('active');
+      this.startGraffitySfx();
       console.log('✏️ 낙서 모드 시작 (마우스)');
     });
     
@@ -298,6 +325,7 @@ class GameController {
       this.isGraffityMode = false;
       this.lastGraffityPos = null;
       this.graffityButton?.classList.remove('active');
+      this.endGraffitySfx();
       console.log('✏️ 낙서 모드 종료 (마우스)');
     });
     
@@ -306,6 +334,7 @@ class GameController {
         this.isGraffityMode = false;
         this.lastGraffityPos = null;
         this.graffityButton?.classList.remove('active');
+        this.endGraffitySfx();
         console.log('✏️ 낙서 모드 종료 (마우스 나김)');
       }
     });
@@ -930,18 +959,89 @@ class GameController {
 
   startSleepSequence() {
     if (!this.roomState || this.roomState.sleeping) return;
-    if (!this.sleepOverlay) return;
     this.roomState.sleeping = true;
     this.hideRoomChoice(true);
-    this.sleepOverlay.classList.remove('hidden');
-    if (this.sleepOverlayText) {
-      this.sleepOverlayText.textContent = '일단 자고 보자~';
-    }
     this.paused = true;
     
     // 방 BGM 정지
     this.stopRoomNightBgm();
     this.stopRoomMorningBgm();
+    
+    // 잠들기 컷씬 재생
+    this.playSleepCutscene();
+  }
+  
+  playSleepCutscene() {
+    if (!this.sleepCutsceneContainer || !this.sleepCutsceneVideo) {
+      // 컷씬이 없으면 기존 오버레이 방식 사용
+      console.warn('잠들기 컷씬 요소가 없습니다. 기본 방식을 사용합니다.');
+      this.startSleepSequenceOld();
+      return;
+    }
+    
+    // 비디오 컨테이너 표시
+    this.sleepCutsceneContainer.classList.remove('hidden');
+    
+    // 비디오 재생
+    this.sleepCutsceneVideo.currentTime = 0;
+    this.sleepCutsceneVideo.play().catch(err => {
+      console.error('잠들기 컷씬 재생 실패:', err);
+      this.sleepCutsceneContainer.classList.add('hidden');
+      this.startSleepSequenceOld();
+    });
+    
+    // 비디오 종료 시 아침으로 전환
+    const onVideoEnd = () => {
+      this.sleepCutsceneContainer.classList.add('hidden');
+      this.sleepCutsceneVideo.removeEventListener('ended', onVideoEnd);
+      
+      if (!this.roomState) return;
+      this.roomState.sleeping = false;
+      this.roomState.hasSlept = true;
+      if (typeof this.map?.setMorning === 'function') {
+        this.map.setMorning(true);
+      }
+      // 아침 BGM 재생
+      this.playRoomMorningBgm();
+      this.paused = false;
+      
+      console.log('🌅 아침이 되었습니다 (컷씬 종료)');
+    };
+    
+    this.sleepCutsceneVideo.addEventListener('ended', onVideoEnd);
+    
+    // 스페이스바로 스킵 가능
+    const skipHandler = (e) => {
+      if (e.code === 'Space' && !this.sleepCutsceneContainer.classList.contains('hidden')) {
+        e.preventDefault();
+        this.sleepCutsceneVideo.pause();
+        this.sleepCutsceneContainer.classList.add('hidden');
+        this.sleepCutsceneVideo.removeEventListener('ended', onVideoEnd);
+        document.removeEventListener('keydown', skipHandler);
+        
+        if (!this.roomState) return;
+        this.roomState.sleeping = false;
+        this.roomState.hasSlept = true;
+        if (typeof this.map?.setMorning === 'function') {
+          this.map.setMorning(true);
+        }
+        // 아침 BGM 재생
+        this.playRoomMorningBgm();
+        this.paused = false;
+        
+        console.log('🌅 아침이 되었습니다 (컷씬 스킵)');
+      }
+    };
+    document.addEventListener('keydown', skipHandler);
+  }
+  
+  startSleepSequenceOld() {
+    if (!this.sleepOverlay) return;
+    this.sleepOverlay.classList.remove('hidden');
+    if (this.sleepOverlayText) {
+      this.sleepOverlayText.textContent = '일단 자고 보자~';
+    }
+    
     setTimeout(() => {
       if (!this.roomState) return;
       this.roomState.sleeping = false;
@@ -972,6 +1072,72 @@ class GameController {
     // 현재 줌 레벨 저장
     const originalZoom = this.camera.baseZoom;
     
+    // 드러눕기 컷씬 재생
+    this.playLieDownCutscene(originalZoom);
+  }
+  
+  playLieDownCutscene(originalZoom) {
+    if (!this.lieDownCutsceneContainer || !this.lieDownCutsceneVideo) {
+      // 컷씬 요소가 없으면 기존 방식으로
+      console.warn('드러눕기 컷씬 요소가 없습니다. 기본 애니메이션을 사용합니다.');
+      this.startLieDownSequenceOld(originalZoom);
+      return;
+    }
+    
+    // 비디오 컨테이너 표시
+    this.lieDownCutsceneContainer.classList.remove('hidden');
+    
+    // 비디오 재생
+    this.lieDownCutsceneVideo.currentTime = 0;
+    this.lieDownCutsceneVideo.play().catch(err => {
+      console.error('드러눕기 컷씬 재생 실패:', err);
+      this.lieDownCutsceneContainer.classList.add('hidden');
+      this.paused = false;
+      this.setMode(MODES.NIGHT);
+      this.camera.setZoom(originalZoom, true);
+      this.camera.setBaseZoom(originalZoom);
+    });
+    
+    // 비디오 종료 시 밤 모드로 전환
+    const onVideoEnd = () => {
+      this.lieDownCutsceneContainer.classList.add('hidden');
+      this.lieDownCutsceneVideo.removeEventListener('ended', onVideoEnd);
+      
+      // 밤 모드로 전환
+      this.setMode(MODES.NIGHT);
+      
+      // 카메라 줌을 원래대로 복원
+      this.camera.setZoom(originalZoom, true);
+      this.camera.setBaseZoom(originalZoom);
+      
+      console.log('🌙 밤이 되었습니다 (컷씬 종료)');
+    };
+    
+    this.lieDownCutsceneVideo.addEventListener('ended', onVideoEnd);
+    
+    // 스페이스바로 스킵 가능
+    const skipHandler = (e) => {
+      if (e.code === 'Space' && !this.lieDownCutsceneContainer.classList.contains('hidden')) {
+        e.preventDefault();
+        this.lieDownCutsceneVideo.pause();
+        this.lieDownCutsceneContainer.classList.add('hidden');
+        this.lieDownCutsceneVideo.removeEventListener('ended', onVideoEnd);
+        document.removeEventListener('keydown', skipHandler);
+        
+        // 밤 모드로 전환
+        this.setMode(MODES.NIGHT);
+        
+        // 카메라 줌을 원래대로 복원
+        this.camera.setZoom(originalZoom, true);
+        this.camera.setBaseZoom(originalZoom);
+        
+        console.log('🌙 밤이 되었습니다 (컷씬 스킵)');
+      }
+    };
+    document.addEventListener('keydown', skipHandler);
+  }
+  
+  startLieDownSequenceOld(originalZoom) {
     // 카메라를 플레이어에게 천천히 줌인 (2초에 걸쳐)
     const targetZoom = this.camera.zoom + 2.0;
     this.camera.setZoom(targetZoom, false); // 부드럽게 줌인
@@ -1278,6 +1444,22 @@ class GameController {
       this.approachSfx2.pause();
       this.approachSfx2.currentTime = 0;
     }
+    if (this.fireSfx && !this.fireSfx.paused) {
+      this.fireSfx.pause();
+      this.fireSfx.currentTime = 0;
+    }
+    if (this.graffityStartSfx && !this.graffityStartSfx.paused) {
+      this.graffityStartSfx.pause();
+      this.graffityStartSfx.currentTime = 0;
+    }
+    if (this.graffityLoopSfx && !this.graffityLoopSfx.paused) {
+      this.graffityLoopSfx.pause();
+      this.graffityLoopSfx.currentTime = 0;
+    }
+    if (this.graffityEndSfx && !this.graffityEndSfx.paused) {
+      this.graffityEndSfx.pause();
+      this.graffityEndSfx.currentTime = 0;
+    }
   }
   
   stopAllMusic() {
@@ -1541,9 +1723,13 @@ class GameController {
 
   handleNightVictory() {
     if (this.pendingReset) return;
-    this.pendingReset = { mode: MODES.NIGHT, timer: 4 };
-    this.messageBanner.show('모든 배터리를 모았습니다! 조심히 탈출하세요.', 4);
-    setTimeout(() => this.setMode(MODES.NIGHT), 4200);
+    this.pendingReset = { mode: MODES.ROOM, timer: 3 };
+    this.messageBanner.show('모든 배터리를 모았습니다! 집으로 돌아갑니다...', 3);
+    
+    // 3초 후 밤 상태의 쵸로키 방으로 이동
+    setTimeout(() => {
+      this.setMode(MODES.ROOM, { roomMorning: false });
+    }, 3200);
   }
 
   triggerGameOver() {
@@ -1826,6 +2012,75 @@ class GameController {
     console.log('💦 침 발라놨다!');
   }
   
+  playFireSfx() {
+    if (!this.fireSfx || !this.bgmEnabled) return;
+    
+    this.fireSfx.currentTime = 0;
+    this.fireSfx.volume = 0.8;
+    this.fireSfx.play().catch(err => {
+      console.error('불 효과음 재생 실패:', err);
+    });
+    console.log('🔥 화르르!');
+  }
+  
+  startGraffitySfx() {
+    if (!this.bgmEnabled) return;
+    
+    // 루프 사운드를 미리 준비 (preload)
+    if (this.graffityLoopSfx) {
+      this.graffityLoopSfx.currentTime = 0;
+      this.graffityLoopSfx.volume = 0.8;
+      // load()를 호출해서 버퍼링 준비
+      this.graffityLoopSfx.load();
+    }
+    
+    // 아.mp3 재생 (시작 사운드)
+    if (this.graffityStartSfx) {
+      this.graffityStartSfx.currentTime = 0;
+      this.graffityStartSfx.volume = 0.8;
+      
+      // 이전 이벤트 리스너 제거 (중복 방지)
+      this.graffityStartSfx.onended = null;
+      
+      // 아.mp3가 끝나는 순간 앙.mp3 루프 시작
+      this.graffityStartSfx.onended = () => {
+        if (this.isGraffityMode && this.graffityLoopSfx) {
+          this.graffityLoopSfx.play().catch(err => {
+            console.error('낙서 루프 효과음 재생 실패:', err);
+          });
+          console.log('✏️ 낙서 사운드: 앙(루프) 시작');
+        }
+      };
+      
+      this.graffityStartSfx.play().catch(err => {
+        console.error('낙서 시작 효과음 재생 실패:', err);
+      });
+    }
+    
+    console.log('✏️ 낙서 사운드: 아 → 앙(루프)');
+  }
+  
+  endGraffitySfx() {
+    if (!this.bgmEnabled) return;
+    
+    // 루프 사운드 정지
+    if (this.graffityLoopSfx && !this.graffityLoopSfx.paused) {
+      this.graffityLoopSfx.pause();
+      this.graffityLoopSfx.currentTime = 0;
+    }
+    
+    // 기분조아.mp3 재생 (종료 사운드)
+    if (this.graffityEndSfx) {
+      this.graffityEndSfx.currentTime = 0;
+      this.graffityEndSfx.volume = 0.8;
+      this.graffityEndSfx.play().catch(err => {
+        console.error('낙서 종료 효과음 재생 실패:', err);
+      });
+    }
+    
+    console.log('✏️ 낙서 사운드: 기분조아!');
+  }
+  
   renderGums() {
     // 학교 모드(낮/밤)에서만 껌 렌더링
     if (this.mode !== MODES.DAY && this.mode !== MODES.NIGHT) return;
@@ -2007,6 +2262,9 @@ class GameController {
     
     // 연결된 모든 낙서 찾기
     const connectedGraffities = this.findConnectedGraffities(startIndex);
+    
+    // 화르르 사운드 재생
+    this.playFireSfx();
     
     // 최대 거리 계산 (2초 동안 퍼지도록)
     const maxDistance = Math.max(...connectedGraffities.map(g => g.distance), 1);
@@ -2286,6 +2544,10 @@ const controller = new GameController({
   cutsceneVideo: document.getElementById('cutsceneVideo'),
   schoolCutsceneContainer: document.getElementById('schoolCutsceneContainer'),
   schoolCutsceneVideo: document.getElementById('schoolCutsceneVideo'),
+  lieDownCutsceneContainer: document.getElementById('lieDownCutsceneContainer'),
+  lieDownCutsceneVideo: document.getElementById('lieDownCutsceneVideo'),
+  sleepCutsceneContainer: document.getElementById('sleepCutsceneContainer'),
+  sleepCutsceneVideo: document.getElementById('sleepCutsceneVideo'),
   bgmToggle: document.getElementById('bgmToggle'),
   musicToggle: document.getElementById('musicToggle'),
   hearingToggle: document.getElementById('hearingToggle'),

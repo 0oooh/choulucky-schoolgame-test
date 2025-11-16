@@ -573,6 +573,60 @@ footer {
   object-fit: cover;
 }
 
+#lieDownCutsceneContainer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 1);
+  z-index: 2000;
+  pointer-events: all;
+  transition: opacity 0.3s ease;
+}
+
+#lieDownCutsceneContainer.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#lieDownCutsceneVideo {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+#sleepCutsceneContainer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 1);
+  z-index: 2000;
+  pointer-events: all;
+  transition: opacity 0.3s ease;
+}
+
+#sleepCutsceneContainer.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#sleepCutsceneVideo {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
 .sleep-overlay,
 .room-choice {
   position: absolute;
